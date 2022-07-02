@@ -521,12 +521,14 @@ proc serve*(
                    [$self.settings.port, self.settings.appName])
 
   var jes = self
+  let isIpv6 = parseIpAddress(self.settings.bindAddr).family == IpAddressFamily.IPv6
+  let dom = if isIpv6: Domain.AF_INET6 else: Domain.AF_INET
   when useHttpBeast:
     run(
       proc (req: httpbeast.Request): Future[void] =
          {.gcsafe.}:
           result = handleRequest(jes, req),
-      httpbeast.initSettings(self.settings.port, self.settings.bindAddr, self.settings.numThreads)
+      httpbeast.initSettings(self.settings.port, self.settings.bindAddr, self.settings.numThreads, dom)
     )
   else:
     self.httpServer = newAsyncHttpServer(reusePort=self.settings.reusePort)
@@ -534,7 +536,9 @@ proc serve*(
       self.settings.port,
       proc (req: asynchttpserver.Request): Future[void] {.gcsafe, closure.} =
         result = handleRequest(jes, req),
-      self.settings.bindAddr)
+      self.settings.bindAddr,
+      domain = dom
+    )
     if not self.settings.futureErrorHandler.isNil:
       serveFut.callback = self.settings.futureErrorHandler
     else:
